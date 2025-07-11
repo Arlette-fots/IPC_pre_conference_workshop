@@ -1,0 +1,892 @@
+---
+title: " Exploring and Analyzing Satellite Gridded data with R and Git Code Tracking:  
+Gridded data Hands-on Session"
+author: "Arlette Simo Fotso"
+format:
+  html: 
+    grid:
+      sidebar-width: 250px
+      body-width: 1050px
+      margin-width: 300px
+date: today
+lightbox: true
+toc: true
+code-fold: true
+execute: 
+  warning: false
+  message: false
+editor: visual
+---
+
+# Gridded data Hands-on Session
+
+## Plan of the hands-on session {auto-animate="true"}
+
+-   Necessary packages
+-   Mapping vector data
+-   Mapping demographic data
+-   Mapping and manipulating gridded data
+-   Comparing demographic and environmental indicator
+
+## R Main Necessary Tools to Manipulate Spatial Data {.nonincremental}
+
+To work with rasters and vectors in R, we need some key packages:
+
+-   `sf`: Support for simple features, a standardized way to encode spatial vector data.
+-   `stars`, `terra`, or `raster` to handle raster data.
+-   `terra` replaces the `raster` package. The interfaces of terra and raster are similar, but terra is simpler, faster, and can do more.
+-   `ggspatial`: Spatial Data Framework for `ggplot2` to map data.
+-   Here we will also use `tidyverse` for data manipulation.
+
+![](images/sf.png){.absolute left="0" height="200"}
+
+![](images/terra.png){.absolute left="300" height="200"}
+
+![](images/ggplot2.png){.absolute left="600" height="200"}
+
+![](images/tidyverse.png){.absolute left="900" height="200"}
+
+## Get Ready to Start
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-   Go to the [IPC_pre_conference_workshop](https://github.com/Arlette-fots/IPC_pre_conference_workshop) repository on GitHub
+-   Download the project folder as a zip file (or fork it to your own GitHub accountand clone it)
+-   Open the zip folder `IPC_pre_conference_workshop`.
+-   Double-click on the file `IPC_pre_conference_workshop.Rproj` included in this project folder.
+    -   This will open RStudio in a new project environment.
+-   Open `Analysis.qmd` and begin following along with these code chunks.
+-   Note: Quarto / Rmarkdown work best if the path to your directory has no space
+-   Install any necessary packages if not already installed using this command:
+
+```{r, results='hide'}
+# Installs any necessary packages if not already installed 
+# sometime you need to install Rtools before  (https://cran.r-project.org/bin/windows/Rtools/rtools44/rtools.html)
+for(
+  pkg in c(
+    "srvyr", "survey", "tidyverse", "sf", "terra", "ggspatial", "stars", "stringi", "exactextractr", "haven", "spdep", "geodata", "tmap" #, "rasters", "gtools", "srvyr", "survey", "lme4", "broom.mixed", "broom", "remotes"
+  )
+){
+  if(!require(pkg, quietly = TRUE, character.only = TRUE)){
+    install.packages(pkg)
+  }
+}
+```
+
+## Or install packages one by one {visibility="hidden"}
+
+```{r}
+# install.packages("Rtools") # somitime requires to install other packages
+# install.packages("srvyr")    # For weighting complex data with the tidyverse language
+# install.packages("survey")    # For working with complex survey data
+# install.packages("tidyverse") # A language to manipulate data in R
+# install.packages("sf")        # Manipulate vector objects
+# install.packages("terra")     # Manipulate raster objects. Terra is simpler, faster, and can do more
+# install.packages("stars")     # Manipulate raster objects
+# install.packages("ggspatial") # Plot spatial objects with ggplot2
+# install.packages("ggpubr")    # To combine multiple plots
+# install.packages("geodata")   # GADM to import shapefiles directly from R
+# install.packages("spdep")     # For spatial autocorrelation analysis
+# install.packages("haven")     # To import SPSS, Stata, and SAS data
+
+```
+
+## Libraries {visibility="hidden"}
+
+```{r}
+library(srvyr)    # For weighting complex data with the tidyverse language
+library(survey)    # For working with complex survey data
+library(tidyverse) # A language to manipulate data in R
+library(sf)        # Manipulate vector objects
+library(terra)     # Manipulate raster objects. Terra is simpler, faster, and can do more
+library(stars)     # Manipulate raster objects
+library(ggspatial) # Plot spatial objects with ggplot2
+library(ggpubr)    # To combine multiple plots
+library(geodata)   # GADM to import shapefiles directly from R
+library(spdep)     # For spatial autocorrelation analysis
+library(exactextractr) # Fast extraction from raster datasets using polygons
+library(haven)     # To import SPSS, Stata, and SAS data
+library(tmap)      # For static and interactive maps
+```
+
+# Working with vector data
+
+## Example with DHS GPS data of senegal
+
+-   Open the file in `R`
+
+```{r, results='hide'}
+senegal19gps <- st_read("data/SNG_gps/SNGE8BFL.shp")
+class(senegal19gps$geometry)
+```
+
+-   Check the CRS of the data
+
+```{r}
+st_crs(senegal19gps)
+```
+
+## Quick plotting with `plot`
+
+```{r}
+plot(senegal19gps$geometry)
+```
+
+## More Enhanced Plot with `ggplot`
+
+```{r}
+#| echo: true
+
+ggplot() +
+  layer_spatial(senegal19gps, fill = NA) +
+  theme_minimal() # You can also use theme_void() for a blank canvas
+```
+
+## Add north arrow and bar scale
+
+```{r}
+#| echo: true
+#| output-location: slide
+ggplot() +
+  layer_spatial(senegal19gps, fill = NA) +
+  theme_void()  +
+  labs(
+    title = "Fig- Map of DHS clusters"
+  ) +
+  annotation_scale(
+    location = "br",
+    pad_x = unit(3, "cm")
+  ) +
+  annotation_north_arrow(
+    location = "tr",
+    pad_x = unit(0.3, "in"),
+    style = north_arrow_fancy_orienteering
+  )
+```
+
+## Source for Countries' Administrative Borders (Shapefile)
+
+:::::: columns
+:::: {.column width="40%"}
+There are many sources where you can download Shapefile data for countries, such as:
+
+-   [Natural Earth Data](https://www.naturalearthdata.com/)
+-   [DIVA-GIS](https://www.diva-gis.org/gdata)
+-   [OpenStreetMap](https://www.openstreetmap.org/)
+-   [Humanitarian Data Exchange (HDX)](https://data.humdata.org/)
+-   [Geofabrik](https://download.geofabrik.de/)
+-   [USGS Earth Explorer](https://earthexplorer.usgs.gov/)
+
+::: {.fragment .highlight-red}
+-   [**Global Administrative Areas (GADM)**](https://gadm.org/download_country.html)
+:::
+::::
+
+::: {.column width="60%"}
+![](images/shapefile_download.png){.absolute height="400"}
+:::
+::::::
+
+## Opening the Shapefile/Basemap of Senegal
+
+-   Using the downloaded files and the `sf` package to open:
+
+```{r, results='hide'}
+senegal0 <- st_read(  here::here("data", "shapefile_SEN", "gadm41_SEN_0.shp") )
+class(senegal0$geometry)
+```
+
+-   Check the CRS of the data
+
+```{r}
+st_crs(senegal0)
+```
+
+-   The EPSG is 4326
+
+## Transforming CRS of the spatial object
+
+-   Load a test shapefile of Senegal
+
+```{r, results='hide'}
+senegal_test <- st_read( here::here("data", "shapefile_SEN_test", "gadm41_SEN_3.shp"))
+
+```
+
+```{r}
+st_crs(senegal_test)
+```
+
+-   The EPSG is 32628
+
+## Transforming the `senegal_test` CRS into `senegal0` CRS
+
+```{r}
+senegal_test_project <- st_transform(senegal_test, st_crs(senegal0))
+# Alternatively, you can use the EPSG code directly as follows:
+# senegal_test_project <- st_transform(senegal_test, crs = 4326)
+st_crs(senegal_test_project)
+```
+
+## More efficient way of getting shapefiles: the `geodata` package
+
+```{r, results='hide'}
+#download the shapefile of Senegal
+poly.adm0 <- geodata::gadm(country="Senegal", level=0, path=tempdir())
+poly.adm1 <- geodata::gadm(country="Senegal", level=1, path=tempdir())
+poly.adm2 <- geodata::gadm(country="Senegal", level=2, path=tempdir())
+poly.adm3 <- geodata::gadm(country="Senegal", level=3, path=tempdir())
+
+#read it with the Sf package
+adm0 <- sf::st_as_sf(poly.adm0)
+adm1 <- sf::st_as_sf(poly.adm1)
+adm2 <- sf::st_as_sf(poly.adm2)
+adm3 <- sf::st_as_sf(poly.adm3)
+#str(adm2)
+
+```
+
+## Plot the country borders in R
+
+```{r}
+ggplot() +
+    layer_spatial(adm0, fill = NA ) +
+theme_minimal() # theme_void()
+
+```
+
+## Plot the country's admin1 borders
+
+```{r}
+
+ggplot() +
+    layer_spatial(adm1, fill = NA,  color = "blue") +
+theme_minimal() # theme_void()
+
+```
+
+## Plot the country's admin2 borders
+
+```{r}
+
+ggplot() +
+    layer_spatial(adm2, fill = NA, color = "red" ) +
+theme_minimal() # theme_void()
+
+```
+
+## Plot both DHS clusters and country's admin1 borders
+
+```{r}
+ggplot() +
+    layer_spatial(adm1, fill = NA  ) +
+    layer_spatial(senegal19gps,fill = NA) +
+theme_minimal() # theme_void()
+
+```
+
+# Working with Individual Level Data: Example with DHS Individual Dataset
+
+## Preparing the Data
+
+-   We created a **Moderately or Severely Wasted** indicator: children aged 0-59 months whose weight-for-height z-score is below -2.0 standard deviations (SD) from the median on the WHO Child Growth Standards (i.e., `hc72 < -200`).
+
+-   First, we load the demo data.
+
+```{r}
+load(here::here("data", "demodata",  "demodata.RData"))
+```
+
+-   We then weight the data, taking into account the DHS complex sample design.
+
+```{r}
+demodatawt <- demodata %>% as_survey_design(ids = psu, strata = strata, weights = wt, nest = TRUE)
+
+```
+
+-   Create the table for the proportion by admin1 subdivision.
+
+```{r}
+demodata_prev_admin1 <- demodatawt  %>% 
+  srvyr::group_by(region) %>% 
+  srvyr::summarize(
+    waist_prev = survey_mean(waisted)
+  )
+```
+
+-   Merge with the basemap.
+
+```{r}
+demodata_prev_admin1_shp = left_join( adm1%>% mutate(CC_1=as.double(CC_1)), demodata_prev_admin1 %>% mutate(CC_1=as.double(region)), by = join_by(CC_1))
+class(demodata_prev_admin1_shp)
+```
+
+## Ploting waisting prevalence at country's admin 1 level
+
+```{r}
+#| echo: true
+#| output-location: slide
+ # ggplot() +
+ #  geom_sf(data = demodata_prev_admin1_shp, aes(fill = waist_prev)) +
+ #  scale_fill_gradient2(name= "Waisting prevalence", low = "#4375B7", high = "#D72B22", na.value = "transparent") +
+ # theme_minimal() # theme_void()
+ 
+ ggplot() + 
+  layer_spatial(demodata_prev_admin1_shp, aes(fill = waist_prev)) +
+  scale_fill_viridis_c(name= "Waisting prevalence", na.value = NA) +
+  theme_minimal()
+
+```
+
+## Plotting at Lower Administrative Level
+
+-   Plotting at lower administrative levels (e.g., Admin 2) is more challenging because DHS randomly displaces the clusters' GPS latitude/longitude positions for confidentiality.
+
+-   However, the displacement is restricted so that the points stay within the country's Admin2 area.
+
+-   Admin2 names or polygons are not included in the GPS data, so we need to spatially join the DHS GPS data with the Admin2 base-map from GADM.
+
+## Spatially Join the Two Datasets with `st_join` to Get Admin2 Names
+
+```{r, results='hide'}
+senegal19gps_adm2 <- st_join(senegal19gps, adm2)
+# we check that it worked well
+anti_join(senegal19gps_adm2 |> st_drop_geometry(), adm2, by = "NAME_2") # 0 # To check the gps points that are not placed in any entity from the basemap
+anti_join(adm2, senegal19gps_adm2 |> st_drop_geometry(), by = "NAME_2") # 0 # To check the map entities that don't have any gps inside them
+```
+
+## Preparing the data
+
+-   then we merge individual DHS data with DHS GPS dataset which has admin 2 names
+
+```{r, results='hide'}
+demodata_2 <- left_join(demodata, senegal19gps_adm2, by = join_by(cluster_number == DHSCLUST))
+anti_join(demodata, senegal19gps, by = join_by(cluster_number == DHSCLUST)) # This should have 0 rows if all rows are matched in the left_join
+
+```
+
+-   then we weight the data taking in account the complex sample designs
+
+```{r, results='hide'}
+demodatawt <- demodata_2 %>% as_survey_design(ids = psu, strata = strata, weights = wt, nest = TRUE)
+
+```
+
+-   creating the table for the proportion by admin 2
+
+```{r, results='hide'}
+demodata_prev_admin2 <- demodatawt  %>% 
+  srvyr::group_by(NAME_2) %>% 
+  srvyr::summarize(
+    waist_prev = survey_mean(waisted)
+    
+  )
+```
+
+-   Joining the prevalence dataframe with country admin2 borders
+
+```{r, results='hide'}
+demodata_prev_admin2_shp <- left_join(adm2, demodata_prev_admin2, by = join_by(NAME_2 == NAME_2)) 
+# Check that all names match : anti_join(senegal19_basemap2, senegal19_prev_admin2, by = join_by(NAME_2 == NAME_2))
+
+```
+
+## Then plotting waisting prevalence at admin 2 level
+
+```{r}
+ wasting_plot2 = ggplot() + 
+  layer_spatial(demodata_prev_admin2_shp, aes(fill = waist_prev)) +
+  scale_fill_viridis_c(name= "Waisting prevalence", na.value = NA) +
+  theme_minimal()
+
+wasting_plot2
+```
+
+-   save it
+
+```{r}
+ggsave(here::here("results",  "prev_waist.png"), width = 15, height = 10)
+```
+
+## Zoom in on a Specific Region (Dakar)
+
+```{r}
+# Filter the data for the Dakar region
+demodata_prev_admin2_shp_dkr = demodata_prev_admin2_shp[demodata_prev_admin2_shp$NAME_1 == "Dakar", ]
+demodata_prev_admin2_shp_dkr = demodata_prev_admin2_shp %>% filter(NAME_1 == "Dakar")
+#plot it
+ggplot() + 
+  layer_spatial(demodata_prev_admin2_shp_dkr, aes(fill = waist_prev)) +
+  scale_fill_viridis_c(name= "Waisting prevalence", na.value = NA) +
+  theme_minimal()
+
+```
+
+or
+
+```{r}
+# fixe the limit of the Senegal's map to show Dakar region only
+ggplot() + 
+  layer_spatial(demodata_prev_admin2_shp, aes(fill = waist_prev)) +
+  scale_fill_viridis_c(name= "Waisting prevalence", na.value = NA) +
+  coord_sf(xlim = c(-17.5, -17.1), ylim = c( 14.5, 14.9)) +
+  theme_minimal()
+
+```
+
+# Working with raster/gridded data
+
+## Some Sources for Environmental Gridded Data
+
+-   Precipitation: [Climate Hazards Center InfraRed Precipitation (CHIRPS)](https://climateserv.servirglobal.net/map)
+
+-   temperature: [The NASA Goddard Institute for Space Studies temperature analysis dataset (GISTEMP-v4)](https://cds.climate.copernicus.eu/cdsapp#!/dataset/insitu-gridded-observations-global-and-regional?tab=overview)
+
+-   Vegetation : [Normalized Difference Vegetation Index (NDVI)](https://climateserv.servirglobal.net/help) <!--NDVI available only  for Africa and Asia here-->
+
+-   Land Cover : [Global Land Cover Mapping and Estimation Yearly 30 m V001](https://cmr.earthdata.nasa.gov/search/concepts/C2527691623-LPDAAC_ECS.html)
+
+-   Fine particulate: [Global and regional PM2.5](https://sites.wustl.edu/acag/datasets/)
+
+-   Human presence: [Global Human Settlement Layer](https://sedac.ciesin.columbia.edu/data/set/ghsl-population-built-up-estimates-degree-urban-smod/data-download) (GHSL)
+
+-   Population : [WorldPop gridded population estimate datasets](https://www.worldpop.org/datacatalog/)
+
+<!-- -   Some demogaphic data sets: [IPUMS-DHS CONTEXTUAL VARIABLES](https://www.idhsdata.org/idhs/contextual_variables_overview.shtml) -->
+
+-   Others : [Socioeconomic Data and Applications Center (SEDAC)](https://sedac.ciesin.columbia.edu/data/sets/browse/2)
+
+## Downloading example for CHIRPS data
+
+::::: columns
+::: {.column width="60%"}
+-   Go to <https://climateserv.servirglobal.net/map>
+-   Select or draw your area
+-   Type of request: raw data
+-   Dataset type: observation
+-   Data source: UCSB CHIRPS rainfall, select period
+-   Format: tif
+-   Range: 01/01/2015 - 31/12/2020
+-   Submit query (it takes a few minutes)
+:::
+
+::: {.column width="40%"}
+![](images/chips_download.png){.absolute right="0" height="300"}
+:::
+:::::
+
+## Raster files with terra package
+
+::::: columns
+::: {.column width="80%"}
+-   The `stars`, `raster`, and `terra` packages allow you to read raster data.
+
+-   The [terra](https://rspatial.github.io/terra/) package has a single object class for raster data, `SpatRaster`.
+
+-   A `SpatRaster` represents a spatially referenced surface divided into three-dimensional cells (rows, columns, and layers).
+
+-   When a `SpatRaster` is created from a file, it does not load the cell (pixel) values into memory (RAM).
+
+-   It only reads the parameters that describe the geometry of the `SpatRaster`, such as the number of rows and columns and the coordinate reference system. The actual values are only read when needed.
+:::
+
+::: {.column width="30%"}
+![](images/terra.png){.absolute top="200" right="0" height="200"}
+:::
+:::::
+
+## Opening a single layer raster file
+
+We open the file `20200508.tif` located in the `chirps_tif2` folder with `rast` command
+
+```{r}
+prec_20200508 <- rast(here::here("data", "chirps_tif2",  "20200508.tif"))
+
+#prec_20230508 <- rast("data/chirps_tif2/20200508.tif") # works as well
+class(prec_20200508)
+
+```
+
+::: fragment
+Then we check the object created by displaying it
+
+```{r}
+prec_20200508
+```
+:::
+
+::: fragment
+This output summaries the `.tif` file for August 5, 2020 (2020/05/08). Note that there is:
+
+-   108 rows of pixels
+-   173 columns of pixels
+-   1 *layer* named `20200508`
+:::
+
+## Ploting the raster with ggplot/ggspatial
+
+```{r}
+
+ggplot() +
+    layer_spatial(  prec_20200508 ) + 
+  labs(fill = "Daily rainfall in mm (2020/05/08)") +
+theme_minimal()
+```
+
+## Adding Senegal basemap
+
+-   First Checking CRS
+
+::: panel-tabset
+### CRS shapefile senegal
+
+```{r}
+st_crs(adm2)
+```
+
+### CRS raster prec_20230508
+
+```{r}
+st_crs(prec_20200508)
+```
+:::
+
+## Then the plot
+
+```{r}
+ggplot() +
+    layer_spatial(
+    prec_20200508
+  ) +
+    layer_spatial(
+    adm2,
+    fill = NA,
+color= "red"
+  ) +
+  theme_minimal()
+```
+
+## Croping a raster
+
+-   Before cropping, it's always a good idea to check the CRS of both the raster and the spatial object
+
+-   It will not work if they don't match.
+
+-   The command bellow gives an error message
+
+```{r}
+#prec_20230508_crop  <- crop(prec_20200508, senegal_test)
+```
+
+-   The one bellow works because the 2 objects have the same CRS
+
+```{r}
+prec_20200508_crop  <- crop(prec_20200508, adm0)
+prec_20200508_crop
+prec_20200508
+
+```
+
+## Saving raster data
+
+-   Sometime you may want to save cropped raster data or some data modified
+
+```{r}
+terra::writeRaster(prec_20200508_crop, here::here("data", "modified_data", "prec_prec_20200508_crop.tif"), filetype = "GTiff" ,  overwrite=TRUE)
+```
+
+## Extracting raster values for a polygon
+
+-   `exactextract` package provides a fast and accurate algorithm for summarizing values in the portion of a raster dataset that is covered by a polygon,
+-   Unlike other zonal statistics implementations, it takes into account raster cells that are partially covered by the polygon
+
+```{r, results='hide'}
+prec_by_districts <- exactextractr::exact_extract(
+  prec_20200508, 
+  adm2, 
+  fun = "mean"
+) %>% 
+as.data.frame() %>%
+  dplyr::rename_with(
+    ~ifelse(
+      stringr::str_detect(.x, "\\."), 
+      paste0("chirps")
+    )
+  ) #%>%
+  # bind_cols(senegal, .)
+
+```
+
+-   So, extract() returns a data.frame, where ID values represent the corresponding row number in the polygons data.
+
+## Summary of the values
+
+```{r}
+summary(prec_by_districts)
+```
+
+## Working with multilayer raster
+
+You can stack multiple raster layers of the same spatial resolution and extent to create a RasterStack using raster::stack() or RasterBrick using raster::brick().
+
+Bur rast of `terra` package is more powerful
+
+Often times, processing a multi-layer object has computational advantages over processing multiple single-layer one by on
+
+```{r}
+# the list of path to the files
+files_list <- c("data/chirps_tif2/20200131.tif", "data/chirps_tif2/20200201.tif")
+
+#read the two at the same time 
+
+  multi_layerraster<- rast(files_list)
+multi_layerraster
+
+```
+
+## Working with all files in a single folder as a list
+
+```{r}
+#first import all files in a single folder as a list 
+rastlist <- list.files(path = "data/chirps_tif2", pattern='.tif$', all.files= T, full.names= T)
+#--- read the all at the same time ---#
+allprec <- terra::rast(rastlist)
+allprec
+```
+
+## Or better create one multi-layered raster for each year
+
+```{r}
+# first we create a year list
+years <- map(2015:2020, ~{
+  list.files("data/chirps_tif2/", pattern = paste0("^", .x), full.names = TRUE)
+})
+
+# rename the list
+years <- set_names(years, 2015:2020) 
+
+
+#create a multi-layer raster per year and store all years in one large list
+
+years <- years %>% map(~.x %>% rast)
+
+```
+
+```{r}
+years$`2019`
+```
+
+## Yearly rainfall accumulation
+
+```{r}
+# for a sigle year
+years$`2019` %>% sum()
+```
+
+```{r}
+#More efficiently, we’ll apply the same sum function to every year in our list
+chirps_yearly_sum <- map(years, ~.x %>% sum)
+```
+
+## Creating a raster of 1 layer per year
+
+```{r}
+chirps_yearly_sum <- rast(chirps_yearly_sum)
+chirps_yearly_sum
+```
+
+For every pixel (0.05 degrees lat by 0.05 degree lon), we now have the total rainfall accumulation for every year 2015-2020.
+
+## Let us plot it for 2019
+
+```{r}
+precip_plot = ggplot() + 
+  layer_spatial(mask(chirps_yearly_sum$`2019`, vect(adm2), touches = FALSE)) + 
+  layer_spatial(adm2, alpha = 0) +
+  theme_minimal() + 
+  scale_fill_gradient2(low = "#D72B22", high = "#4375B7", na.value = "transparent") + 
+  labs(fill = "Total precipitation (2019)")
+precip_plot
+```
+
+## Caculation with raster data {auto-animate="true"}
+
+-   Example with the z-score of the yearly rainfall accumulation
+
+::: fragment
+First we calculate the *average* yearly rainfall accumulation for each pixel (across all years):
+
+```{r}
+chirps_avg <- mean(chirps_yearly_sum)
+```
+:::
+
+::: fragment
+The *standard deviation* from that average:
+
+```{r}
+chirps_sd <- stdev(chirps_yearly_sum)
+```
+:::
+
+::: fragment
+Finally we can use both to compute a Z-score for each pixel in each year.
+
+```{r}
+chirps_z <- (chirps_yearly_sum - chirps_avg) / chirps_sd
+```
+:::
+
+::: fragment
+```{r, echo=FALSE}
+chirps_z
+```
+:::
+
+## We can now extract the values per districts or any area of interest for our study
+
+We extract mean values by districts, rename columns and merge with senegal borders shapefile
+
+```{r, results='hide'}
+tot_yearly_prec_by_dep <- exactextractr::exact_extract(
+  chirps_yearly_sum, 
+  adm2, 
+  fun = "mean"
+) %>% 
+  dplyr::rename_with(
+    ~ifelse(
+      stringr::str_detect(.x, "\\."), 
+      paste0("chirps", .)
+    )
+  ) %>%
+   bind_cols(adm2, .)
+#summary(chirps_yearly_sum)
+class(tot_yearly_prec_by_dep)
+```
+
+## Plot the mean total precipitaion at district level in 2019
+
+```{r}
+precip_plot2= ggplot() + 
+    layer_spatial(tot_yearly_prec_by_dep, aes(fill = `chirpsmean.2019`)) +
+  theme_minimal() + 
+  scale_fill_gradient2(low = "#D72B22", high = "#4375B7", na.value = "transparent") + 
+  labs(fill = "Mean total precipitation (2019)")
+precip_plot2
+```
+
+## Comparing precipitation and chlid wasting prevalence
+
+```{r}
+ggarrange(wasting_plot2, precip_plot2,
+          common.legend = FALSE,  legend = "bottom")
+```
+
+## bivariate plot {visibility="hidden"}
+
+```{r}
+ggplot() + 
+  #geom_sf(demodata_prev_admin2_shp) + 
+    layer_spatial(mask(chirps_yearly_sum$`2019`, vect(adm2), touches = FALSE)) + 
+  scale_fill_gradient2(low = "#D72B22", high = "#4375B7", na.value = "transparent") + 
+  labs(fill = "Total precipitation (2019)") +
+  geom_sf(data = st_centroid(demodata_prev_admin2_shp),  #get centroids
+          aes(size = waist_prev), name="Waisting prevalence") +  # variable for size
+   layer_spatial(adm2, fill = NA) +
+  theme_minimal() 
+```
+
+## bivariate plot {visibility="hidden"}
+
+```{r}
+ggplot() + 
+  layer_spatial(demodata_prev_admin2_shp, aes(fill = waist_prev)) +
+  scale_fill_viridis_c(name= "Waisting prevalence", na.value = NA) +
+  geom_sf(data = st_centroid(tot_yearly_prec_by_dep),  #get centroids
+          aes(size = `chirpsmean.2019`)) +  # variable for size
+    labs(fill = "Total precipitation (2019)") +
+  theme_minimal() 
+```
+
+## Interractive maps with `tmap`
+
+```{r}
+tmap_mode("view")
+
+sengal <-tm_shape(demodata_prev_admin2_shp) +
+  tm_borders() +
+  tm_polygons(col ="waist_prev", palette="Greens", values.range=.9, id="NAME_2", title="Waisting prevalence") +
+ # tm_compass() + tm_scale_bar() + tm_layout(legend.outside = TRUE) +
+  #tmap_options(check.and.fix = TRUE) +
+  tm_scale_bar(position = c("left", "bottom"))
+
+sengal
+
+```
+
+
+
+# THANK YOU FOR YOUR ATTENTION
+
+## Contact {.r-fit-text}
+
+:::: columns
+::: {.column width="90%"}
+Arlette Simo Fotso (Researcher, INED) : `arlette.simo-fotso@ined.fr` ![](images/arlette_pic.png){.absolute left="400" bottom="50" height="300"}
+:::
+::::
+
+# To go further: spatial autocorrelation
+
+## Moran's I
+
+-   Though our visual senses can, in some cases, discern clustered regions from non-clustered regions, the distinction may not always be so obvious
+-   One popular measure of spatial autocorrelation is the Moran’s I coefficient
+-   Read more about it [here](https://mgimond.github.io/Spatial/spatial-autocorrelation.html)
+-   Define neighboring polygons
+    -   We must first define what is meant by “neighboring” polygons
+    -   contiguous neighbor, distance based neighbor (allows for annulus neighbors) or k nearest neighbor
+-   we need to assign weights to each neighboring polygon
+
+## Let's do it with the `spdep` package
+
+-   we’ll adopt a contiguous neighbor definition where we’ll accept any contiguous polygon that shares at least on vertex
+
+```{r}
+nb <- poly2nb(demodata_prev_admin2_shp, queen=TRUE)
+
+```
+
+-   In our case, each neighboring polygon will be multiplied by the weight 1/(N of neighbors) such that the sum of the weights equal 1
+
+```{r}
+lw <- nb2listw(nb, style="W", zero.policy=FALSE) #Setting zero.policy to FALSE will return an error if at least one polygon has no neighbor
+```
+
+-   Computing the Moran’s I coefficient demodata_prev_admin2_shp, aes(fill = waist_prev
+
+```{r}
+moran(demodata_prev_admin2_shp$waist_prev, listw = lw, n = length(nb), S0 = Szero(lw))
+```
+
+```{=html}
+<!-- http://gis.humboldt.edu/OLM/r/Spatial%20Analysis%20With%20R.pdf
+
+https://mgimond.github.io/Spatial/spatial-autocorrelation-in-r.html
+-->
+```
+
+## Assessing statistical significance
+
+-   Monte Carlo approach
+
+```{r}
+MC<- moran.mc(demodata_prev_admin2_shp$waist_prev, lw, nsim = 999)
+MC$p.value
+```
+
+-   It is also possible to compute Local Moran’s I, but you need large data
+
+-   More [here](https://mgimond.github.io/Spatial/spatial-autocorrelation-in-r.html)
